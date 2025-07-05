@@ -3,42 +3,12 @@ import os
 import ccxt
 import math
 
-app`app.py` Code
-
-This version adjusts how the bot finds the position symbol, making it compatible with the exact data Binance provides. ** = Flask(__name__)
-
-# --- Load Environment Variables ---
-API_KEY = os.getenv("API_KEY")
-API_SECRET = os.getenv("API_SECRET")
-SECRET_KEY = os.getenv("SECRETThis should be the final code change you need.**
-
-```python
-from flask import Flask, request, jsonify
-import os
-import ccxt
-import math
-
 app = Flask(__name__)
 
 # --- Load Environment Variables ---
 API_KEY = os.getenv("API_KEY")
-API_SECRET = os.getenv("API_SECRET")_KEY", "test1234")
-
-if not API_KEY or not API_SECRET:
-    raise Exception("CRITICAL: Missing API_KEY or API_SECRET.")
-
-# --- Initialize Exchange Connection for Binance Futures Testnet ---
-try:
-    print("Attempting to connect to Binance Futures Testnet...")
-    exchange = ccxt.binance({
-        'apiKey': API_KEY,
-        'secret': API_SECRET,
-        'enableRateLimit': True,
-        'options': { 
-            'defaultType': 'future',
-            # --- THIS IS THE FINAL FIX ---
-            # It tells the API we are in One-Way mode, not Hedge mode
-SECRET_KEY = os.getenv("SECRET_KEY", "test1234")
+API_SECRET = os.getenv("API_SECRET")
+SECRET_KEY = os.getenv("SECRET_KEY", "test1234") # This line is now fixed.
 
 if not API_KEY or not API_SECRET:
     raise Exception("CRITICAL: Missing API_KEY or API_SECRET.")
@@ -60,36 +30,7 @@ except Exception as e:
 
 @app.route('/')
 def home():
-.
-            'positionSide': 'BOTH' 
-        }
-    })
-    exchange.set_sandbox_mode(True)
-    exchange.load_markets()
-    print("SUCCESS: Connection to Binance Futures Testnet established.")
-except Exception as e:
-    raise Exception(f"Error initializing exchange connection: {e}")
-
-@app.route('/')
-def home():
     return "Webhook Bot for Binance Futures is live!"
-
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    try:
-        data = request.get_json(force=True)
-        print(f"Webhook received: {data}")
-    except Exception as e:
-        return jsonify({"status": "error", "message": f"Invalid JSON: {e}"}), 400
-
-    if data.get("secret") != SECRET_KEY:
-        return jsonify({"status": "error", "message": "Invalid secret key"}), 403
-
-    symbol = data.get("symbol")
-    side = data.get("side")
-    action = data.get("action")
-    try:
-        qty_pct = float(data.    return "Webhook Bot for Binance Futures is live!"
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -128,28 +69,6 @@ def webhook():
             if last_price is None:
                 return jsonify({"status": "error", "message": f"Could not get price for {symbol}."}), 400
 
-            amount_in_usdt = available_balance * (qty_pctget("qty_pct", 0))
-    except (ValueError, TypeError):
-        qty_pct = 0
-
-    if not symbol:
-        return jsonify({"status": "error", "message": "Missing 'symbol' in webhook data"}), 400
-
-    try:
-        if side == "buy":
-            print(f"Processing BUY order for {symbol}...")
-            balance = exchange.fetch_balance()
-            quote_currency = "USDT"
-            available_balance = balance['free'].get(quote_currency, 0)
-            print(f"Available balance: {available_balance} {quote_currency}")
-            if available_balance <= 1:
-                return jsonify({"status": "error", "message": f"Insufficient balance."}), 400
-            
-            ticker = exchange.fetch_ticker(symbol)
-            last_price = ticker.get('last')
-            if last_price is None:
-                return jsonify({"status": "error", "message": f"Could not get price for {symbol}."}), 400
-
             amount_in_usdt = available_balance * (qty_pct / 100)
             amount = amount_in_usdt / last_price
             
@@ -160,34 +79,9 @@ def webhook():
 
         elif action == "close":
             print(f"Processing CLOSE signal for {symbol}...")
-            # Set positionSide to BOTH for fetching positions in One-Way mode
-            params = {'positionSide': 'BOTH'}
-            all_positions = exchange.fetch_positions(symbols=[symbol], params=params)
-            
-            print("--- DEBUG: Full Position Data Received from Binance ---")
-            print(all_positions)
-            print("------------------------------------------------ / 100)
-            amount = amount_in_usdt / last_price
-            
-            print(f"Attempting to place market BUY order for {amount:.4f} {symbol} at ~${last_price}")
-            order = exchange.create_market_buy_order(symbol, amount)
-            print(f"SUCCESS: Buy Order executed.")
-            return jsonify({"status": "success", "order": order}), 200
-
-        elif action == "close":
-            print(f"Processing CLOSE signal for {symbol}...")
-            
-            # Fetch all open positions
             all_positions = exchange.fetch_positions()
             
-            # This is no longer needed but is safe to keep for future debugging.
-            print("--- DEBUG: Full Position Data Received from Binance ---")
-            print(all_positions)
-            print("-----------------------------------------------------")
-            
-            # --- THE FINAL FIX IS HERE ---
-            # We find the position by checking if the webhook symbol (e.g., "ETHUSDT") is *contained within* the position symbol (e.g., "ETH/USDT:USDT").
-            # This is more flexible and handles the format difference.
+            # This logic now correctly handles the different symbol formats
             pos = next((p for p in all_positions if symbol in p.get('symbol') and float(p.get("positionAmt", 0)) != 0), None)
             
             if pos:
@@ -196,29 +90,10 @@ def webhook():
 
                 print(f"Open position found: {pos['positionAmt']} {pos['symbol']}. Placing market {side_to_close.upper()} order for {qty} to close.")
                 
-                # We use pos['symbol'] to ensure we close the exact instrument Binance reported.
                 if side_to_close == 'sell':
                     order = exchange.create_market_sell_order(pos['symbol'], qty, {"reduceOnly": True})
                 else:
                     order = exchange.create_market_buy_order(pos['symbol'], qty, {"reduceOnly": True})
-                
-                print(f"SUCCESS: Close Order executed.")
-                return jsonify({"status": "success", "order": order}), 200
-            else:
-                print("Info:-----")
-            
-            pos = next((p for p in all_positions if p.get('symbol') == symbol and float(p.get("positionAmt", 0)) != 0), None)
-
-            if pos:
-                qty = abs(float(pos["positionAmt"])) 
-                side_to_close = 'sell' if float(pos["positionAmt"]) > 0 else 'buy'
-
-                print(f"Open position found: {pos['positionAmt']} {symbol}. Placing market {side_to_close.upper()} order for {qty} to close.")
-                
-                if side_to_close == 'sell':
-                    order = exchange.create_market_sell_order(symbol, qty, {"reduceOnly": True})
-                else:
-                    order = exchange.create_market_buy_order(symbol, qty, {"reduceOnly": True})
                 
                 print(f"SUCCESS: Close Order executed.")
                 return jsonify({"status": "success", "order": order}), 200
