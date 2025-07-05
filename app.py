@@ -55,7 +55,7 @@ def webhook():
         return jsonify({"status": "error", "message": "Missing 'symbol' in webhook data"}), 400
 
     try:
-        # --- BUY LOGIC (No changes needed here) ---
+        # --- BUY LOGIC (No changes) ---
         if side == "buy":
             print(f"Processing BUY order for {symbol}...")
             balance = exchange.fetch_balance()
@@ -82,25 +82,26 @@ def webhook():
         elif action == "close":
             print(f"Processing CLOSE signal for {symbol}...")
             
-            # **THE FIX:** Instead of fetching all positions, we ask for the specific symbol.
-            # This is a more direct and reliable way to get the position data.
+            # Fetch position data specifically for the symbol we want to close.
             positions = exchange.fetch_positions(symbols=[symbol])
             
-            print(f"--- DEBUG: Positions returned for symbol {symbol}: {positions} ---")
-            
-            # The rest of the logic remains the same, but it will now have the correct data to work with.
+            # Find the position with a non-zero amount.
             pos = next((p for p in positions if float(p.get("positionAmt", 0)) != 0), None)
             
             if pos:
-                qty = abs(float(pos["positionAmt"])) 
-                side_to_close = 'sell' if float(pos["positionAmt"]) > 0 else 'buy'
-
-                print(f"Open position found: {pos['positionAmt']} {symbol}. Placing market {side_to_close.upper()} order for {qty} to close.")
+                # Get the absolute size of the position (handles both long and short)
+                qty_to_close = abs(float(pos.get("positionAmt")))
                 
+                # Determine the side needed to close the position
+                side_to_close = 'sell' if float(pos.get("positionAmt")) > 0 else 'buy'
+
+                print(f"Open position found: {pos['positionAmt']} {symbol}. Placing market {side_to_close.upper()} order for {qty_to_close} to close.")
+                
+                # Create the closing order using the correct side
                 if side_to_close == 'sell':
-                    order = exchange.create_market_sell_order(symbol, qty, {"reduceOnly": True})
-                else:
-                    order = exchange.create_market_buy_order(symbol, qty, {"reduceOnly": True})
+                    order = exchange.create_market_sell_order(symbol, qty_to_close, {'reduceOnly': True})
+                else: # side_to_close == 'buy'
+                    order = exchange.create_market_buy_order(symbol, qty_to_close, {'reduceOnly': True})
                 
                 print(f"SUCCESS: Close Order executed.")
                 return jsonify({"status": "success", "order": order}), 200
