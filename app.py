@@ -55,7 +55,7 @@ def webhook():
         return jsonify({"status": "error", "message": "Missing 'symbol' in webhook data"}), 400
 
     try:
-        # --- BUY LOGIC (No changes) ---
+        # --- BUY LOGIC (No changes, this works perfectly) ---
         if side == "buy":
             print(f"Processing BUY order for {symbol}...")
             balance = exchange.fetch_balance()
@@ -78,30 +78,34 @@ def webhook():
             print(f"SUCCESS: Buy Order executed.")
             return jsonify({"status": "success", "order": order}), 200
 
-        # --- CLOSE LOGIC (FINAL REVISED VERSION) ---
+        # --- CLOSE LOGIC (Final Version based on the guide) ---
         elif action == "close":
             print(f"Processing CLOSE signal for {symbol}...")
             
-            # Fetch position data specifically for the symbol we want to close.
-            positions = exchange.fetch_positions(symbols=[symbol])
+            # **THE FIX:** We fetch all positions using a parameter that mimics the guide's function.
+            # This returns the data in the simple format we need.
+            all_positions = exchange.fapiPrivateGetPositionRisk()
             
-            # Find the position with a non-zero amount.
-            pos = next((p for p in positions if float(p.get("positionAmt", 0)) != 0), None)
+            # Find the position for the specified symbol where the amount is not zero
+            pos = next((p for p in all_positions if p.get('symbol') == symbol and float(p.get("positionAmt", 0)) != 0), None)
             
             if pos:
-                # Get the absolute size of the position (handles both long and short)
-                qty_to_close = abs(float(pos.get("positionAmt")))
+                # Get the absolute size of the position
+                qty_to_close = abs(float(pos.get("positionAmt", 0)))
                 
-                # Determine the side needed to close the position
-                side_to_close = 'sell' if float(pos.get("positionAmt")) > 0 else 'buy'
+                # Determine if we need to sell (to close a long) or buy (to close a short)
+                side_to_close = 'SELL' if float(pos.get("positionAmt")) > 0 else 'BUY'
 
-                print(f"Open position found: {pos['positionAmt']} {symbol}. Placing market {side_to_close.upper()} order for {qty_to_close} to close.")
+                print(f"Open position found: {pos['positionAmt']} {symbol}. Placing market {side_to_close} order for {qty_to_close} to close.")
                 
-                # Create the closing order using the correct side
-                if side_to_close == 'sell':
-                    order = exchange.create_market_sell_order(symbol, qty_to_close, {'reduceOnly': True})
-                else: # side_to_close == 'buy'
-                    order = exchange.create_market_buy_order(symbol, qty_to_close, {'reduceOnly': True})
+                # Place the closing order using the exact parameters from the guide
+                order = exchange.futures_create_order(
+                    symbol=symbol,
+                    side=side_to_close,
+                    type='MARKET',
+                    quantity=qty_to_close,
+                    params={'reduceOnly': True} # Safety parameter
+                )
                 
                 print(f"SUCCESS: Close Order executed.")
                 return jsonify({"status": "success", "order": order}), 200
