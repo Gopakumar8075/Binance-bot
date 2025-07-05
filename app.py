@@ -55,7 +55,6 @@ def webhook():
         return jsonify({"status": "error", "message": "Missing 'symbol' in webhook data"}), 400
 
     try:
-        # --- BUY LOGIC (Unchanged) ---
         if side == "buy":
             print(f"Processing BUY order for {symbol}...")
             balance = exchange.fetch_balance()
@@ -63,12 +62,12 @@ def webhook():
             available_balance = balance['free'].get(quote_currency, 0)
             print(f"Available balance: {available_balance} {quote_currency}")
             if available_balance <= 1:
-                return jsonify({"status": "error", "message": f"Insufficient balance. Only {available_balance} {quote_currency} available."}), 400
+                return jsonify({"status": "error", "message": f"Insufficient balance."}), 400
             
             ticker = exchange.fetch_ticker(symbol)
             last_price = ticker.get('last')
             if last_price is None:
-                return jsonify({"status": "error", "message": f"Could not retrieve 'last' price for {symbol}."}), 400
+                return jsonify({"status": "error", "message": f"Could not get price for {symbol}."}), 400
 
             amount_in_usdt = available_balance * (qty_pct / 100)
             amount = amount_in_usdt / last_price
@@ -78,25 +77,30 @@ def webhook():
             print(f"SUCCESS: Buy Order executed.")
             return jsonify({"status": "success", "order": order}), 200
 
-        # --- SELL / CLOSE LOGIC (FIXED) ---
         elif action == "close":
             print(f"Processing CLOSE signal for {symbol}...")
             
+            # Fetch all open positions
             all_positions = exchange.fetch_positions()
-            # **FIX #1:** Find the position based on a non-zero 'positionAmt'
+            
+            # --- THIS IS THE NEW DEBUGGING LINE ---
+            # It will print exactly what Binance is sending us.
+            print("--- DEBUG: Full Position Data Received from Binance ---")
+            print(all_positions)
+            print("-----------------------------------------------------")
+            
+            # Find the specific position for the symbol from the webhook
             pos = next((p for p in all_positions if p.get('symbol') == symbol and float(p.get("positionAmt", 0)) != 0), None)
 
             if pos:
-                # **FIX #2:** Use 'positionAmt' to get the quantity. It can be negative (for shorts), so we need its absolute value.
                 qty = abs(float(pos["positionAmt"])) 
                 side_to_close = 'sell' if float(pos["positionAmt"]) > 0 else 'buy'
 
                 print(f"Open position found: {pos['positionAmt']} {symbol}. Placing market {side_to_close.upper()} order for {qty} to close.")
                 
-                # **FIX #3:** Use the correct closing side with 'reduceOnly' to guarantee it closes the position.
                 if side_to_close == 'sell':
                     order = exchange.create_market_sell_order(symbol, qty, {"reduceOnly": True})
-                else: # side_to_close == 'buy'
+                else:
                     order = exchange.create_market_buy_order(symbol, qty, {"reduceOnly": True})
                 
                 print(f"SUCCESS: Close Order executed.")
@@ -105,7 +109,7 @@ def webhook():
                 print("Info: No open position found to close for this symbol.")
                 return jsonify({"status": "info", "message": "No open position to close"}), 200
         else:
-            return jsonify({"status": "error", "message": "Webhook received with invalid 'side' or 'action'"}), 400
+            return jsonify({"status": "error", "message": "Invalid side/action"}), 400
 
     except ccxt.BaseError as e:
         print(f"ERROR (CCXT): An error occurred with the exchange: {e}")
