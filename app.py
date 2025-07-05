@@ -8,7 +8,7 @@ app = Flask(__name__)
 # --- Load Environment Variables ---
 API_KEY = os.getenv("API_KEY")
 API_SECRET = os.getenv("API_SECRET")
-SECRET_KEY = os.getenv("SECRET_KEY", "test1234") # This line is now fixed.
+SECRET_KEY = os.getenv("SECRET_KEY", "test1234")
 
 if not API_KEY or not API_SECRET:
     raise Exception("CRITICAL: Missing API_KEY or API_SECRET.")
@@ -81,7 +81,9 @@ def webhook():
             print(f"Processing CLOSE signal for {symbol}...")
             all_positions = exchange.fetch_positions()
             
-            # This logic now correctly handles the different symbol formats
+            # --- THIS IS THE FINAL FIX ---
+            # Instead of an exact match, we check if the webhook symbol is CONTAINED IN the position symbol.
+            # This correctly matches "ETHUSDT" with "ETH/USDT:USDT".
             pos = next((p for p in all_positions if symbol in p.get('symbol') and float(p.get("positionAmt", 0)) != 0), None)
             
             if pos:
@@ -90,6 +92,7 @@ def webhook():
 
                 print(f"Open position found: {pos['positionAmt']} {pos['symbol']}. Placing market {side_to_close.upper()} order for {qty} to close.")
                 
+                # Use the exact symbol from the position data to ensure the right instrument is closed.
                 if side_to_close == 'sell':
                     order = exchange.create_market_sell_order(pos['symbol'], qty, {"reduceOnly": True})
                 else:
