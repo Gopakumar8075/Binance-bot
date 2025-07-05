@@ -56,6 +56,7 @@ def webhook():
 
     try:
         if side == "buy":
+            # --- BUY LOGIC (Works Perfectly, No Changes) ---
             print(f"Processing BUY order for {symbol}...")
             balance = exchange.fetch_balance()
             quote_currency = "USDT"
@@ -78,25 +79,25 @@ def webhook():
             return jsonify({"status": "success", "order": order}), 200
 
         elif action == "close":
+            # --- CLOSE LOGIC (FINAL FIX) ---
             print(f"Processing CLOSE signal for {symbol}...")
             all_positions = exchange.fetch_positions()
             
-            # --- THIS IS THE FINAL FIX ---
-            # Instead of an exact match, we check if the webhook symbol is CONTAINED IN the position symbol.
-            # This correctly matches "ETHUSDT" with "ETH/USDT:USDT".
-            pos = next((p for p in all_positions if symbol in p.get('symbol') and float(p.get("positionAmt", 0)) != 0), None)
-            
+            # **THE FINAL FIX:** Match the symbol from the webhook ('ETHUSDT') 
+            # with the symbol inside the 'info' dictionary from Binance.
+            pos = next((p for p in all_positions if p.get('info', {}).get('symbol') == symbol and float(p.get("positionAmt", 0)) != 0), None)
+
             if pos:
                 qty = abs(float(pos["positionAmt"])) 
                 side_to_close = 'sell' if float(pos["positionAmt"]) > 0 else 'buy'
 
-                print(f"Open position found: {pos['positionAmt']} {pos['symbol']}. Placing market {side_to_close.upper()} order for {qty} to close.")
+                print(f"Open position found: {pos['positionAmt']} {pos['info']['symbol']}. Placing market {side_to_close.upper()} order for {qty} to close.")
                 
-                # Use the exact symbol from the position data to ensure the right instrument is closed.
+                # Use the correct symbol from the position data to place the closing order
                 if side_to_close == 'sell':
-                    order = exchange.create_market_sell_order(pos['symbol'], qty, {"reduceOnly": True})
+                    order = exchange.create_market_sell_order(pos['info']['symbol'], qty, {"reduceOnly": True})
                 else:
-                    order = exchange.create_market_buy_order(pos['symbol'], qty, {"reduceOnly": True})
+                    order = exchange.create_market_buy_order(pos['info']['symbol'], qty, {"reduceOnly": True})
                 
                 print(f"SUCCESS: Close Order executed.")
                 return jsonify({"status": "success", "order": order}), 200
