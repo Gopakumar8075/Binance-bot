@@ -78,32 +78,36 @@ def webhook():
             print(f"SUCCESS: Buy Order executed.")
             return jsonify({"status": "success", "order": order}), 200
 
-        # --- CLOSE LOGIC (FINAL, REVISED VERSION) ---
+        # --- CLOSE LOGIC (FINAL, REVISED VERSION WITH MORE DEBUGGING) ---
         elif action == "close":
             print(f"Processing CLOSE signal for {symbol}...")
             
-            # **THE FIX:** Use the standard CCXT method to fetch all positions.
             all_positions = exchange.fetch_positions()
             
-            # This debug line will show you the structure of all positions returned.
             print(f"--- DEBUG: All positions fetched: {all_positions} ---")
             
-            # Find the specific position. We look for 'symbol' inside the 'info' dictionary
-            # because that matches the exact format 'ETHUSDT' sent from your webhook.
-            # We also ensure 'positionAmt' is non-zero to confirm it's an active position.
-            pos = next((p for p in all_positions if p.get('info', {}).get('symbol') == symbol and float(p.get("positionAmt", 0)) != 0), None)
+            pos = None
+            for p in all_positions:
+                p_info_symbol = p.get('info', {}).get('symbol')
+                p_position_amt_str = p.get("positionAmt", "0")
+                try:
+                    p_position_amt = float(p_position_amt_str)
+                except ValueError:
+                    p_position_amt = 0.0 # Handle cases where positionAmt might not be a valid number
+                
+                print(f"--- DEBUG Check: Comparing webhook symbol '{symbol}' with position symbol '{p_info_symbol}' and position amount '{p_position_amt_str}' (float: {p_position_amt}) ---")
+                
+                if p_info_symbol == symbol and p_position_amt != 0:
+                    print(f"--- DEBUG Match Found! Position: {p} ---")
+                    pos = p
+                    break # Found the relevant position, exit loop
             
             if pos:
-                # Get the absolute size of the position (e.g., 5.874)
                 qty_to_close = abs(float(pos.get("positionAmt", 0)))
-                
-                # Determine the side needed to close the position
                 side_to_close = 'sell' if float(pos.get("positionAmt")) > 0 else 'buy'
 
                 print(f"Open position found: {pos['positionAmt']} {symbol}. Placing market {side_to_close.upper()} order for {qty_to_close} to close.")
                 
-                # Place the closing order using the original symbol from the webhook ('ETHUSDT')
-                # This ensures the symbol format is correct for the order placement.
                 if side_to_close == 'sell':
                     order = exchange.create_market_sell_order(symbol, qty_to_close, {'reduceOnly': True})
                 else: # side_to_close == 'buy'
