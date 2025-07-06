@@ -3,7 +3,7 @@ import os
 import ccxt
 import math
 
-app = Flask(__app__)
+app = Flask(__name__)
 
 # --- Load Environment Variables ---
 API_KEY = os.getenv("API_KEY")
