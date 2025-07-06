@@ -3,7 +3,7 @@ import os
 import ccxt
 import math
 
-app = Flask(__name__)
+app = Flask(__app__)
 
 # --- Load Environment Variables ---
 API_KEY = os.getenv("API_KEY")
@@ -78,7 +78,7 @@ def webhook():
             print(f"SUCCESS: Buy Order executed.")
             return jsonify({"status": "success", "order": order}), 200
 
-        # --- CLOSE LOGIC (FINAL, REVISED VERSION WITH MORE DEBUGGING) ---
+        # --- CLOSE LOGIC (FINAL, REVISED VERSION WITH THE FIX) ---
         elif action == "close":
             print(f"Processing CLOSE signal for {symbol}...")
             
@@ -89,7 +89,8 @@ def webhook():
             pos = None
             for p in all_positions:
                 p_info_symbol = p.get('info', {}).get('symbol')
-                p_position_amt_str = p.get("positionAmt", "0")
+                # *** FIX APPLIED HERE: Access positionAmt from within 'info' dictionary ***
+                p_position_amt_str = p.get('info', {}).get("positionAmt", "0") 
                 try:
                     p_position_amt = float(p_position_amt_str)
                 except ValueError:
@@ -103,10 +104,10 @@ def webhook():
                     break # Found the relevant position, exit loop
             
             if pos:
-                qty_to_close = abs(float(pos.get("positionAmt", 0)))
-                side_to_close = 'sell' if float(pos.get("positionAmt")) > 0 else 'buy'
-
-                print(f"Open position found: {pos['positionAmt']} {symbol}. Placing market {side_to_close.upper()} order for {qty_to_close} to close.")
+                qty_to_close = abs(float(pos.get('info', {}).get("positionAmt", 0))) # Also update this to use 'info'
+                side_to_close = 'sell' if float(pos.get('info', {}).get("positionAmt")) > 0 else 'buy' # And this
+                
+                print(f"Open position found: {pos.get('info', {}).get('positionAmt')} {symbol}. Placing market {side_to_close.upper()} order for {qty_to_close} to close.")
                 
                 if side_to_close == 'sell':
                     order = exchange.create_market_sell_order(symbol, qty_to_close, {'reduceOnly': True})
