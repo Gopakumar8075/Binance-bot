@@ -43,7 +43,7 @@ def webhook():
     if data.get("secret") != SECRET_KEY:
         return jsonify({"status": "error", "message": "Invalid secret key"}), 403
 
-    symbol = data.get("symbol")
+    symbol = data.get("symbol") # This will be 'ETHUSDT' from your webhook
     side = data.get("side")
     action = data.get("action")
     try:
@@ -55,7 +55,7 @@ def webhook():
         return jsonify({"status": "error", "message": "Missing 'symbol' in webhook data"}), 400
 
     try:
-        # --- BUY LOGIC (No changes, this works perfectly) ---
+        # --- BUY LOGIC (No changes needed here) ---
         if side == "buy":
             print(f"Processing BUY order for {symbol}...")
             balance = exchange.fetch_balance()
@@ -78,34 +78,36 @@ def webhook():
             print(f"SUCCESS: Buy Order executed.")
             return jsonify({"status": "success", "order": order}), 200
 
-        # --- CLOSE LOGIC (Final Version based on the guide) ---
+        # --- CLOSE LOGIC (FINAL, REVISED VERSION) ---
         elif action == "close":
             print(f"Processing CLOSE signal for {symbol}...")
             
-            # **THE FIX:** We fetch all positions using a parameter that mimics the guide's function.
-            # This returns the data in the simple format we need.
-            all_positions = exchange.fapiPrivateGetPositionRisk()
+            # **THE FIX:** Use the standard CCXT method to fetch all positions.
+            all_positions = exchange.fetch_positions()
             
-            # Find the position for the specified symbol where the amount is not zero
-            pos = next((p for p in all_positions if p.get('symbol') == symbol and float(p.get("positionAmt", 0)) != 0), None)
+            # This debug line will show you the structure of all positions returned.
+            print(f"--- DEBUG: All positions fetched: {all_positions} ---")
+            
+            # Find the specific position. We look for 'symbol' inside the 'info' dictionary
+            # because that matches the exact format 'ETHUSDT' sent from your webhook.
+            # We also ensure 'positionAmt' is non-zero to confirm it's an active position.
+            pos = next((p for p in all_positions if p.get('info', {}).get('symbol') == symbol and float(p.get("positionAmt", 0)) != 0), None)
             
             if pos:
-                # Get the absolute size of the position
+                # Get the absolute size of the position (e.g., 5.874)
                 qty_to_close = abs(float(pos.get("positionAmt", 0)))
                 
-                # Determine if we need to sell (to close a long) or buy (to close a short)
-                side_to_close = 'SELL' if float(pos.get("positionAmt")) > 0 else 'BUY'
+                # Determine the side needed to close the position
+                side_to_close = 'sell' if float(pos.get("positionAmt")) > 0 else 'buy'
 
-                print(f"Open position found: {pos['positionAmt']} {symbol}. Placing market {side_to_close} order for {qty_to_close} to close.")
+                print(f"Open position found: {pos['positionAmt']} {symbol}. Placing market {side_to_close.upper()} order for {qty_to_close} to close.")
                 
-                # Place the closing order using the exact parameters from the guide
-                order = exchange.futures_create_order(
-                    symbol=symbol,
-                    side=side_to_close,
-                    type='MARKET',
-                    quantity=qty_to_close,
-                    params={'reduceOnly': True} # Safety parameter
-                )
+                # Place the closing order using the original symbol from the webhook ('ETHUSDT')
+                # This ensures the symbol format is correct for the order placement.
+                if side_to_close == 'sell':
+                    order = exchange.create_market_sell_order(symbol, qty_to_close, {'reduceOnly': True})
+                else: # side_to_close == 'buy'
+                    order = exchange.create_market_buy_order(symbol, qty_to_close, {'reduceOnly': True})
                 
                 print(f"SUCCESS: Close Order executed.")
                 return jsonify({"status": "success", "order": order}), 200
